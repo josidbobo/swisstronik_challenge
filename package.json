@@ -1,0 +1,19 @@
+{
+  "name": "swisstronik_challenge",
+  "version": "1.0.0",
+  "description": "A voting smart contract on swiss testnet",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx hardhat test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/josidbobo/swisstronik_challenge.git"
+  },
+  "author": "josidbobo@gmail.com",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/josidbobo/swisstronik_challenge/issues"
+  },
+  "homepage": "https://github.com/josidbobo/swisstronik_challenge#readme"
+}
