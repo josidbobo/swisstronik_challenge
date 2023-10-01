@@ -1,6 +1,6 @@
 # Swisstronik - TechFiesta Developer Challenge
 
-I approach the challenge by creating an Election Factory that produces Election contracts with customised TITLE, CANDIDATES, VOTERS to aid flexibility, this way owner of the contract can deploy Election contracts for multiple elections with the same specification as regards PRIVATE state variables and security but different use cases.
+I approached the challenge by creating an Election Factory that produces Election contracts with customised TITLE, CANDIDATES, POSITIONS to aid flexibility, this way owner of the contract can deploy Election contracts for multiple elections with the same specification as regards PRIVATE state variables and security but different use cases.
 
 The project is structured to aid the ease of viewing the contracts:
 
