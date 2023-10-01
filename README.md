@@ -5,9 +5,7 @@ I approached the challenge by creating an Election Factory that produces Electio
 The project is structured to aid the ease of viewing the contracts:
 
 contracts  
-
-|__  
- 
+|__   
    &ensp; election.sol  
    &ensp; electionAccessControl.sol  
    &ensp; electionFactory.sol  
