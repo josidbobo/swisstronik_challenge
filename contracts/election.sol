@@ -1,0 +1,254 @@
+//SPDX-License-Identifier: Unlicense
+pragma solidity ^0.8.0;
+
+import '@openzeppelin/contracts/security/Pausable.sol';
+import './ElectionAccessControl.sol';
+import "./interfaces/IElectionFactory.sol";
+
+contract Election is Pausable, ElectionAccessControl{
+
+    string private position;
+    uint256 private noOfpartcipate;
+    string[] private contestantsName;
+    bool private electionStatus;
+    bool private resultStatus;
+
+    /// @dev Timestamps for when the election started and ended
+    uint256 private startAt;
+    uint256 private  endAt;
+    uint256 private resultReadyAt;
+
+    /// @notice Election status
+    string constant private PENDING = 'Pending';
+    string constant private STARTED = 'Started';
+    string constant private ENDED = 'Ended';
+    string constant private RESULTS_READY = 'Results ready';
+
+    uint256 immutable private index;
+    address immutable private electionFactory;
+
+    error NoOfParticatantNotMatchingParticipateName();
+    error AlreadyVoted();
+    error ResultNotYetRelease();
+    error AccessDenied();
+    error VotingNotAllowed();
+    error VotingNotStarted();
+    error VotingEnd();
+
+    struct Candidates {
+        string candidatesName;
+        uint256 voteCount;
+    }
+
+    mapping(address => bool) private voterStatus;
+    mapping(string => Candidates) private candidates;
+    mapping(string => uint256) private voteCount;
+    Candidates[] private results;
+
+    /// ======================= MODIFIERS =================================
+    ///@notice modifier to specify that election has not ended
+    modifier electionHasEnded() {
+        require(startAt > endAt, "Sorry, the Election has ended!");
+        _;
+    }
+    ///@notice modifier to check that election is active
+    modifier electionIsActive() {
+        require(startAt > 0 , "Election has not begun!");
+        _;
+    }
+    
+    modifier allRole() {
+        require(
+            hasRole(CHAIRMAN_ROLE, msg.sender) == true || 
+            hasRole(VOTER_ROLE, msg.sender) == true,  "ACCESS DENIED");
+        _;
+    }
+
+    modifier onlyChairmanAndTeacherRole () {
+        require(
+            hasRole(CHAIRMAN_ROLE, msg.sender) == true,
+            "ACCESS FOR TEACHER(s) AND CHAIRMAN ONLY" );
+        _;
+    }
+
+    modifier onlyChairmanRole() {
+        require(
+            hasRole(CHAIRMAN_ROLE, msg.sender) == true,
+            "ACCESS FOR TEACHER(s) AND CHAIRMAN ONLY" );
+        _;
+    }
+
+    ///======================= EVENTS ==============================
+    ///@notice event to emit when election has ended
+    event ElectionEnded(uint256[] _winnerIds, uint256 _winnerVoteCount);
+    event SetUpTeacher(address[] teacher);
+    event SetUpDirector(address[] director);
+    event Vote(address voter);
+    event StartVoting(uint256 startAt);
+    event EndVoting(uint256 endAt);
+    event RegisterStudent(address[] _student);
+    event CompileResult(address compiler);
+    event ShowResult(address stakeholder, uint256 resultReadyAt);
+
+    constructor(
+        address _owner,
+        string memory _position,
+        uint256 _noOfParticipants,
+        string[] memory _contestants,
+        uint256 _index, 
+        address _electionFactory
+    ) ElectionAccessControl(_owner) {
+        if (_noOfParticipants != _contestants.length)
+            revert NoOfParticatantNotMatchingParticipateName();
+
+        position = _position;
+        noOfpartcipate = _noOfParticipants;
+        contestantsName = _contestants;
+        index = _index;
+        electionFactory = _electionFactory;
+
+        for (uint256 i = 0; i < _contestants.length; i++) {
+            Candidates storage _candidates = candidates[_contestants[i]];
+            _candidates.candidatesName = _contestants[i];
+        }
+    }
+
+
+    /// @notice registers student
+    /// @dev only CHAIRMAN_ROLE, who is the owner of the contract can call this method. See ElecionAccessControl for details
+    /// @param _student array of address
+    function registerStudent(address[] memory _student) public  onlyRole(CHAIRMAN_ROLE)  returns(bool) {
+        for(uint i = 0; i < _student.length; i++){
+            grantRole(VOTER_ROLE, _student[i]);
+        }
+
+        emit RegisterStudent(_student);
+        
+        return true;
+    }
+
+
+    /**
+     * @dev Triggers stopped state.
+     *
+     * Requirements:
+     *
+     * - The contract must not be paused.
+     * - only CHAIRMAN_ROLE can call this method
+     */
+    function pause() external onlyRole(CHAIRMAN_ROLE) returns(bool){
+        _pause();
+        return true;
+    }
+
+    /**
+     * @dev Returns to normal state.
+     *
+     * Requirements:
+     *
+     * - The contract must be paused.
+     * - only CHAIRMAN_ROLE can call this method
+     */
+    function unpause() external onlyRole(CHAIRMAN_ROLE) returns(bool){
+        _unpause();
+        return true;
+    }
+
+    /// @notice Ensures that voting begins
+    function enableVoting() external onlyRole(CHAIRMAN_ROLE) {
+         startAt = block.timestamp;
+
+         _updateStatusOnFactory(STARTED);
+
+        emit StartVoting(block.timestamp);
+    }
+
+    /// @notice for voting
+    /// @dev allRole can call this function
+    /// @param _participantsName a string
+    function vote(string memory _participantsName)
+        public 
+        onlyRole(VOTER_ROLE) 
+        electionIsActive
+        electionHasEnded
+        whenNotPaused 
+        returns(bool)
+    {
+        if(voterStatus[msg.sender] == true) revert AlreadyVoted();
+        uint currentVote = voteCount[_participantsName];
+        voteCount[_participantsName] = currentVote + 1;
+        voterStatus[msg.sender] = true;
+
+        emit Vote(msg.sender);
+        return true;
+    }
+
+    function disableVoting() external onlyRole(CHAIRMAN_ROLE) {
+        if(endAt == startAt)
+            revert VotingNotStarted();
+
+        endAt = block.timestamp;
+
+        _updateStatusOnFactory(ENDED);
+
+        emit EndVoting(block.timestamp);
+    }
+
+    /// @notice for compiling vote
+    /// @dev only CHAIRMAN_ROLE who is the owner of the contract can call this function
+    function compileResult() 
+        public 
+        onlyChairmanRole
+        returns(Candidates[] memory)
+    {
+        require(endAt > startAt, 'Election still ongoing or has not started');
+        require(results.length == 0, 'Results already compiled');
+
+        for(uint i = 0; i < contestantsName.length; i++){
+            Candidates memory _candidates = candidates[contestantsName[i]];
+        
+            _candidates.voteCount = voteCount[contestantsName[i]];
+        
+            results.push(_candidates);
+        }
+
+        emit CompileResult(msg.sender);
+
+        return results;
+    }
+
+
+    /// @notice for making result public
+    /// @dev Only Chairman can call this function
+    function showResult() onlyChairmanRole public returns(bool){
+        require(results.length > 0, "Result has not been compiled");
+
+        resultStatus = true;
+
+        _updateStatusOnFactory(RESULTS_READY);
+
+        resultReadyAt = block.timestamp;
+
+        emit ShowResult(msg.sender, resultReadyAt);
+
+        return true;
+    }
+
+    /// @notice for viewing results
+    /// @dev resultStatus must be true to view the result
+    function result() public view returns(Candidates[] memory){
+        if(resultStatus == false) revert ResultNotYetRelease();
+        return results;
+    }
+
+    /// @notice for privateViewing results
+    /// @dev allRole except STUDENT_ROLE can call this method
+    function privateViewResult()  public view onlyChairmanRole returns(Candidates[] memory){
+        return results;
+    }
+
+    /// @dev Makes call to the election factory to update the status of an election.
+    function _updateStatusOnFactory(string memory _status) internal {
+        IElectionFactory(electionFactory).updateElectionStatus(index, _status);
+    }
+}

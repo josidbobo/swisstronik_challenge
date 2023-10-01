@@ -15,5 +15,8 @@
   "bugs": {
     "url": "https://github.com/josidbobo/swisstronik_challenge/issues"
   },
-  "homepage": "https://github.com/josidbobo/swisstronik_challenge#readme"
+  "homepage": "https://github.com/josidbobo/swisstronik_challenge#readme",
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.9.3"
+  }
 }

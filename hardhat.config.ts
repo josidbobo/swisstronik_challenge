@@ -6,3 +6,5 @@ const config: HardhatUserConfig = {
 };
 
 export default config;
+
+https://json-rpc.testnet.swisstronik.com
